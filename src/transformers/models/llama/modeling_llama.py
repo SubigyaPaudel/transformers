@@ -610,6 +610,10 @@ class LlamaSdpaAttention(LlamaAttention):
     SDPA API.
     """
 
+    def __init__(self, config: LlamaConfig, layer_idx: Optional[int] = None):
+        self.force_bidirectional = False
+        super(LlamaSdpaAttention, self).__init__(config, layer_idx)
+
     # Adapted from LlamaAttention.forward
     def forward(
         self,
@@ -675,6 +679,12 @@ class LlamaSdpaAttention(LlamaAttention):
         # We dispatch to SDPA's Flash Attention or Efficient kernels via this if statement instead of an
         # inline conditional assignment to support both torch.compile's `dynamic=True` and `fullgraph=True`
         is_causal = True if causal_mask is None and q_len > 1 else False
+        if self.force_bidirectional:
+            # NOTE: Not all the decoder layers of the llm are causal to begin with
+            # only the first few layers are causal, and then it is not. Thus, we do not\
+            # interfere with this if self.force_bidirectional is not set. Hence setting
+            # is_causal = False inside the if-statement instead of writing plainly is_causal = not self.force_bidirectional
+            is_causal = False
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
